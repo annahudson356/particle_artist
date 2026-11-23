@@ -1,0 +1,36 @@
+#version 450
+
+//-------------------------------------------------------------------------------------//
+// PART I: PARTICLE SIMULATION
+//-------------------------------------------------------------------------------------//
+// Recall with compute shaders, you must define the layout in, representing thread
+// dimensions. Then, define the particle struct, making sure it matches your host code.
+// After, import the particle buffer through a descriptor set, then your push constants,
+// and any const variables. Two of the three required features are relevant here: scale
+// by delta time, and give particles a lifecycle that resets at death. If you create a
+// copy of your particle (like through Particle p = particles[idx]) make sure you write
+// it back to the particle buffer with particles[idx] = p at the end. I'd recommend
+// starting simple, maybe by replicating Monday's demo, then going from there.
+//
+// Hint:    At the very beginning of each invocation, make sure the idx is < the
+//          particles.length... otherwise, return, since the thread isn't actually
+//          operating on a real particle in the buffer.
+//          To effectively reuse pcg_hash, use the previous call's output as the current
+//          call's input.
+
+uint pcg_hash(uint v) //given; for a per-particle, per-frame value: pcg_hash(idx ^ pcg_hash(seed)), seed = total frames
+{
+    uint state = v * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+float to_unit_float(uint h) //given; converts pcg_hash result to a random float between 0 and 1
+{
+    return float(h >> 8) * (1.0 / 16777216.0);
+}
+
+void main()
+{
+
+}
