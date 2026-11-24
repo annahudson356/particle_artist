@@ -69,15 +69,38 @@ struct Vertex {
 // ParticlePushConstants.
 
 struct Particle {
+    // minimal struct referenced on Slide 20 of Chapter 16 slides
+    glm::vec3 position;
+    float current_life;
+    glm::vec3 velocity;
 
+    // additional variables
+    float phase;
+    float age;
+    float lifespan;
+    float rotation;
+    float spin;
+    float seed;
+    uint32_t state;
+    float rest_time;
+    float flip_offset;
 };
 
 struct ComputePushConstants {
-
+    float dt;
+    float time;
+    uint32_t particle_count;
+    float floor_y;
+    glm::vec4 wind;
+    glm::vec4 spawn_min;
+    glm::vec4 spawn_max;
 };
 
 struct ParticlePushConstants {
-
+    glm::mat4 vp;
+    float point_scale;
+    float time;
+    uint32_t pad[2];
 };
 
 struct Material {
@@ -115,6 +138,11 @@ static_assert(sizeof(Material) == 48, "Material must match std430 layout");
 static_assert(sizeof(PointLight) == 32, "PointLight must match std430 layout");
 static_assert(sizeof(LightHeader) == 128, "LightHeader must match std430 layout");
 //(P2) add Particle static_assert here
+// Part A asserts
+static_assert(sizeof(Particle) == 64, "Particle must match std430 layout");
+static_assert(sizeof(Particle) % 16 == 0, "Particle size must be a multiple of 16 (vec3 alignment)");
+static_assert(sizeof(ComputePushConstants) == 64, "ComputePushConstants must match layout");
+static_assert(sizeof(ParticlePushConstants) == 80, "ParticlePushConstants must match layout");
 
 struct VertexKey {
     int position;
