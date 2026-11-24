@@ -1535,6 +1535,10 @@ int main()
     vkDestroyBuffer(device, model_vertex_buffer, nullptr);
     vkFreeMemory(device, model_vertex_buffer_memory, nullptr);
 
+    // Part C pool destruction
+    vkDestroyDescriptorPool(device, compute_descriptor_pool, nullptr);
+    vkDestroyDescriptorSetLayout(device, compute_descriptor_set_layout, nullptr);
+
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
         vkDestroyBuffer(device, light_buffers[i], nullptr);
         vkFreeMemory(device, light_buffer_memory[i], nullptr);
@@ -2464,6 +2468,73 @@ int ComputeDescriptorSetCreation(const VkDevice& device, const VkBuffer& particl
     // function parameters include references to non-const variables to write to. This goes
     // for the other functions you will write, as well. Pay attention to what exits the
     // functions.
+
+    // layout info
+    VkDescriptorSetLayoutBinding binding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+    };
+
+    VkDescriptorSetLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .bindingCount = 1,
+        .pBindings = &binding,
+    };
+
+    VK_CHECK(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &descriptor_set_layout));
+
+    // pool info
+    VkDescriptorPoolSize pool_size = {
+        .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+    };
+
+    VkDescriptorPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .maxSets = 1,
+        .poolSizeCount = 1,
+        .pPoolSizes = &pool_size,
+    };
+
+    VK_CHECK(vkCreateDescriptorPool(device, &pool_info, nullptr, &descriptor_pool));
+
+    // allocate from pool
+    VkDescriptorSetAllocateInfo allocate_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = NULL,
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &descriptor_set_layout,
+    };
+
+    VK_CHECK(vkAllocateDescriptorSets(device, &allocate_info, &descriptor_set));
+
+    // point to particle
+    VkDescriptorBufferInfo buffer_info = {
+        .buffer = particle_buffer,
+        .offset = 0,
+        .range = VK_WHOLE_SIZE,
+    };
+
+    VkWriteDescriptorSet write = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = NULL,
+        .dstSet = descriptor_set,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &buffer_info,
+    };
+
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+
 
 
     return 0;
