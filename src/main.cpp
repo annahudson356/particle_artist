@@ -2626,7 +2626,206 @@ int ParticlePipelineCreation(const VkDevice& device, const VkDescriptorSetLayout
     //          graphics_descriptor_set_layout in your pipeline layout, and only use the
     //          bindings relevant for this purpose.
 
+    VkPipelineRenderingCreateInfo pipeline_rendering_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .pNext = NULL,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &COLOR_FORMAT,
+        .depthAttachmentFormat = DEPTH_FORMAT,
+    };
 
+    // shaders
+    std::vector<uint32_t> fragment_code = ReadSpirv(PARTICLE_FRAGMENT_SHADER_PATH);
+    VkShaderModuleCreateInfo fragment_shader_module_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .codeSize = fragment_code.size() * sizeof(uint32_t),
+        .pCode = fragment_code.data(),
+    };
+    VkShaderModule fragment_shader_module = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateShaderModule(device, &fragment_shader_module_info, nullptr, &fragment_shader_module));
+
+    std::vector<uint32_t> vertex_code = ReadSpirv(PARTICLE_VERTEX_SHADER_PATH);
+    VkShaderModuleCreateInfo vertex_shader_module_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .codeSize = vertex_code.size() * sizeof(uint32_t),
+        .pCode = vertex_code.data(),
+    };
+    VkShaderModule vertex_shader_module = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateShaderModule(device, &vertex_shader_module_info, nullptr, &vertex_shader_module));
+
+    VkPipelineShaderStageCreateInfo shader_stage_infos[2] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = vertex_shader_module,
+            .pName = "main",
+            .pSpecializationInfo = NULL,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .module = fragment_shader_module,
+            .pName = "main",
+            .pSpecializationInfo = NULL,
+        },
+    };
+
+    // the particle buffer, one per vertex
+    VkVertexInputBindingDescription vertex_input_binding = {
+        .binding = 0,
+        .stride = sizeof(Particle),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+    };
+
+    VkVertexInputAttributeDescription vertex_input_attributes[3] = {
+        {
+            .location = 0,
+            .binding = 0,
+            .format = VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = offsetof(Particle, position),
+        },
+        {
+            .location = 1,
+            .binding = 0,
+            .format = VK_FORMAT_R32_SFLOAT,
+            .offset = offsetof(Particle, current_life),
+        },
+        {
+            .location = 2,
+            .binding = 0,
+            .format = VK_FORMAT_R32_SFLOAT,
+            .offset = offsetof(Particle, lifespan),
+        },
+    };
+
+    VkPipelineVertexInputStateCreateInfo vertex_input_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &vertex_input_binding,
+        .vertexAttributeDescriptionCount = 3,
+        .pVertexAttributeDescriptions = vertex_input_attributes,
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo input_assembly_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+    };
+
+    VkPipelineViewportStateCreateInfo viewport_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .viewportCount = 1,
+        .pViewports = VK_NULL_HANDLE,
+        .scissorCount = 1,
+        .pScissors = VK_NULL_HANDLE,
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterization_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_NONE,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .lineWidth = 1.f,
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisample_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    // based on slide 22
+    VkPipelineDepthStencilStateCreateInfo depth_stencil_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .depthTestEnable = VK_TRUE,
+        .depthWriteEnable = VK_FALSE,
+        .depthCompareOp = VK_COMPARE_OP_LESS,
+    };
+
+    VkPipelineColorBlendAttachmentState color_blend_attachment_state_info = {
+        .blendEnable = VK_FALSE,
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+    };
+
+    VkPipelineColorBlendStateCreateInfo color_blend_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .attachmentCount = 1,
+        .pAttachments = &color_blend_attachment_state_info,
+    };
+
+    VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+
+    VkPipelineDynamicStateCreateInfo pipeline_dynamic_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .dynamicStateCount = sizeof(dynamic_states)/sizeof(dynamic_states[0]),
+        .pDynamicStates = dynamic_states,
+    };
+
+    VkPushConstantRange particle_push_constant_range = {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = sizeof(ParticlePushConstants),
+    };
+
+    VkPipelineLayoutCreateInfo particle_pipeline_layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .setLayoutCount = 1,
+        .pSetLayouts = &graphics_descriptor_set_layout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &particle_push_constant_range,
+    };
+
+    VK_CHECK(vkCreatePipelineLayout(device, &particle_pipeline_layout_info, nullptr, &particle_pipeline_layout));
+
+    VkGraphicsPipelineCreateInfo pipeline_info = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = &pipeline_rendering_info,
+        .flags = 0,
+        .stageCount = 2,
+        .pStages = shader_stage_infos,
+        .pVertexInputState = &vertex_input_state_info,
+        .pInputAssemblyState = &input_assembly_state_info,
+        .pTessellationState = VK_NULL_HANDLE,
+        .pViewportState = &viewport_state_info,
+        .pRasterizationState = &rasterization_state_info,
+        .pMultisampleState = &multisample_state_info,
+        .pDepthStencilState = &depth_stencil_state_info,
+        .pColorBlendState = &color_blend_state_info,
+        .pDynamicState = &pipeline_dynamic_state_info,
+        .layout = particle_pipeline_layout,
+        .renderPass = VK_NULL_HANDLE,
+        .subpass = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1,
+    };
+
+    VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &particle_pipeline));
+
+    vkDestroyShaderModule(device, fragment_shader_module, nullptr);
+    vkDestroyShaderModule(device, vertex_shader_module, nullptr);
 
     return 0;
 }
