@@ -2550,6 +2550,64 @@ int ComputePipelineCreation(const VkDevice& device, const VkDescriptorSetLayout&
     // should use sizeof() the struct for the push constant range. At minimum, you should be
     // passing in delta time to keep your simulation frame-rate-independent.
 
+    std::vector<uint32_t> compute_code = ReadSpirv(COMPUTE_SHADER_PATH);
+
+    VkShaderModuleCreateInfo shader_module_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .codeSize = compute_code.size() * sizeof(uint32_t),
+        .pCode = compute_code.data(),
+    };
+
+    VkShaderModule compute_shader_module = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateShaderModule(device, &shader_module_info, nullptr, &compute_shader_module));
+
+    // push constants
+    VkPushConstantRange push_constant_range = {
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        .offset = 0,
+        .size = sizeof(ComputePushConstants),
+    };
+
+    // layout
+    VkPipelineLayoutCreateInfo pipeline_layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .setLayoutCount = 1,
+        .pSetLayouts = &descriptor_set_layout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &push_constant_range,
+    };
+
+    VK_CHECK(vkCreatePipelineLayout(device, &pipeline_layout_info, nullptr, &compute_pipeline_layout));
+
+    //pipeline
+    VkPipelineShaderStageCreateInfo stage_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = compute_shader_module,
+        .pName = "main",
+        .pSpecializationInfo = NULL,
+    };
+
+    VkComputePipelineCreateInfo pipeline_info = {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .stage = stage_info,
+        .layout = compute_pipeline_layout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1,
+    };
+
+    VK_CHECK(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &compute_pipeline));
+
+    vkDestroyShaderModule(device, compute_shader_module, nullptr);
+
     return 0;
 }
 
