@@ -226,11 +226,12 @@ static const glm::vec4 SUN_COLOR =                          glm::vec4(1.f, 1.f, 
 static const uint32_t SHADOW_MAP_SIZE =                     4096;
 static const float SHADOW_EXTENT =                          10.f;
 static const float SHADOW_DISTANCE =                        10.f;
-static const uint32_t PARTICLE_COUNT =                      0;
+static const uint32_t PARTICLE_COUNT = 20000; // I modified this
 static const float PARTICLE_SIZE =                          0.025f; //particle width in world space
 static const char* COMPUTE_SHADER_PATH =                    SHADER_DIR "/particle.comp.spv";
 static const char* PARTICLE_VERTEX_SHADER_PATH =            SHADER_DIR "/particle.vert.spv";
 static const char* PARTICLE_FRAGMENT_SHADER_PATH =          SHADER_DIR "/particle.frag.spv";
+// Added consts not included in the original scaffold
 
 
 
@@ -524,13 +525,20 @@ int main()
     VkBuffer particle_buffer = VK_NULL_HANDLE;
     VkDeviceMemory particle_memory = VK_NULL_HANDLE;
     for (uint32_t i = 0; i < PARTICLE_COUNT; ++i) {
-        particles.push_back({/*initial particle data*/});
+        // Particles currently live between 5-15 seconds
+        float lifespan = 5.f + 10.f * dis(gen);
+        particles.push_back({
+            .position = {-8.f + 16.f * dis(gen), 6.f * dis(gen), -8.f + 16.f * dis(gen)},
+            .current_life = lifespan * dis(gen),
+            .velocity = {0.f, -0.5f, 0.f},
+            .lifespan = lifespan,
+        });
     }
-    //works once particle_bytes > 0
-    //int pb = CreateDeviceLocalBuffer(device, memory_properties, queue, command_pool, particles.data(), particle_bytes, 
-    //                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-    //                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT, particle_buffer, particle_memory);
-    //if (pb != 0) return pb;
+    //works once particle_bytes > 0 (uncommented existing code!)
+    int pb = CreateDeviceLocalBuffer(device, memory_properties, queue, command_pool, particles.data(), particle_bytes, 
+                                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT, particle_buffer, particle_memory);
+    if (pb != 0) return pb;
 
     //--------------------------------------------------------------------------------------//
     // COMPUTE DESCRIPTOR SET CREATION
@@ -1517,6 +1525,10 @@ int main()
 
     vkDestroyBuffer(device, material_buffer, nullptr);
     vkFreeMemory(device, material_buffer_memory, nullptr);
+
+    // Part B buffer destruction
+    vkDestroyBuffer(device, particle_buffer, nullptr);
+    vkFreeMemory(device, particle_memory, nullptr);
 
     vkDestroyBuffer(device, model_index_buffer, nullptr);
     vkFreeMemory(device, model_index_buffer_memory, nullptr);
