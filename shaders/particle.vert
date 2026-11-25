@@ -1,5 +1,4 @@
 #version 450
-
 //-------------------------------------------------------------------------------------//
 // PART J: PARTICLE VERTEX SHADER
 //-------------------------------------------------------------------------------------//
@@ -9,7 +8,19 @@
 // want your shader to run, since we are using points. Divide point_scale by w to achieve
 // perspective-correct sizing (see how lightpoint.vert does it).
 
+layout(location = 0) in vec3  in_position;
+layout(location = 1) in float in_current_life;
+layout(location = 2) in float in_lifespan;
+
+layout(push_constant) uniform Push {
+    mat4 vp;
+    float point_scale;
+    float time;
+} pc;
+
+
 void main()
 {
-
+    gl_Position = pc.vp * vec4(in_position, 1.0);
+    gl_PointSize = pc.point_scale / gl_Position.w;
 }
