@@ -17,6 +17,33 @@
 //          operating on a real particle in the buffer.
 //          To effectively reuse pcg_hash, use the previous call's output as the current
 //          call's input.
+layout(local_size_x = 64) in;
+
+struct Particle {
+    vec3  position;
+    float current_life;
+    vec3  velocity;
+    float phase;
+    float age;
+    float lifespan;
+    float rotation;
+    float spin;
+    float seed;
+    uint  state;
+    float rest_time;
+    float flip_offset;
+};
+
+layout(std430, set = 0, binding = 0) buffer Particles { Particle particles[]; };
+layout(push_constant) uniform Push {
+    float dt;
+    float time;
+    uint  particle_count;
+    float floor_y;
+    vec4  wind;
+    vec4  spawn_min;
+    vec4  spawn_max;
+} pc;
 
 uint pcg_hash(uint v) //given; for a per-particle, per-frame value: pcg_hash(idx ^ pcg_hash(seed)), seed = total frames
 {
@@ -32,5 +59,26 @@ float to_unit_float(uint h) //given; converts pcg_hash result to a random float 
 
 void main()
 {
+    const vec3 GRAVITY = vec3(0.0, -1.0, 0.0);
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= pc.particle_count) return;
 
+    Particle p = particles[idx];
+    p.current_life -= pc.dt;
+    // if goes true if the particle's life is over
+    if(p.current_life <= 0.0){
+        uint h = pcg_hash(idx ^ pcg_hash(floatBitsToUint(pc.time)));
+        vec3 r = vec3(to_unit_float(h), to_unit_float(pcg_hash(h)), to_unit_float(pcg_hash(h ^ 0x9e3779b9u)));
+        p.position = mix(pc.spawn_min.xyz, pc.spawn_max.xyz, r);
+        p.velocity = vec3(0.0, -0.5, 0.0);
+        p.current_life = p.lifespan;
+    } 
+    else{
+        // velocity change
+        p.velocity += (GRAVITY + pc.wind.xyz) * pc.dt;
+        // acceleration
+        p.velocity *= max(0.0, 1.0 - pc.wind.w * pc.dt);
+        p.position += p.velocity * pc.dt;
+    }
+    particles[idx] = p;
 }
