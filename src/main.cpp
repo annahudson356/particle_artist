@@ -2789,18 +2789,6 @@ int ParticlePipelineCreation(const VkDevice& device, const VkDescriptorSetLayout
             .format = VK_FORMAT_R32G32B32_SFLOAT,
             .offset = offsetof(Particle, position),
         },
-        {
-            .location = 1,
-            .binding = 0,
-            .format = VK_FORMAT_R32_SFLOAT,
-            .offset = offsetof(Particle, current_life),
-        },
-        {
-            .location = 2,
-            .binding = 0,
-            .format = VK_FORMAT_R32_SFLOAT,
-            .offset = offsetof(Particle, lifespan),
-        },
     };
 
     VkPipelineVertexInputStateCreateInfo vertex_input_state_info = {
