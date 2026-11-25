@@ -232,7 +232,10 @@ static const char* COMPUTE_SHADER_PATH =                    SHADER_DIR "/particl
 static const char* PARTICLE_VERTEX_SHADER_PATH =            SHADER_DIR "/particle.vert.spv";
 static const char* PARTICLE_FRAGMENT_SHADER_PATH =          SHADER_DIR "/particle.frag.spv";
 // Added consts not included in the original scaffold
-
+static const float FLOOR_Y = 0.f;
+static const glm::vec4 SPAWN_MIN = glm::vec4(-8.f, 6.f, -8.f, 0.f);
+static const glm::vec4 SPAWN_MAX = glm::vec4( 8.f, 6.5f, 8.f, 0.f);
+static const glm::vec4 WIND = glm::vec4(0.f, 0.f, 0.f, 2.f);
 
 
 //validation layers pass debug messages to this function
@@ -1246,6 +1249,81 @@ int main()
 
 
 
+        //-------------------------------------------------------------------------------------//
+        // PART F: COMPUTE DISPATCH
+        //-------------------------------------------------------------------------------------//
+
+        VkBufferMemoryBarrier2 barrier_before_compute = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .pNext = NULL,
+            .srcStageMask = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = particle_buffer,
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+        };
+
+        VkDependencyInfo dependency_info_before_compute = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = NULL,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 1,
+            .pBufferMemoryBarriers = &barrier_before_compute,
+            .imageMemoryBarrierCount = 0,
+            .pImageMemoryBarriers = nullptr,
+        };
+
+        vkCmdPipelineBarrier2(command_buffer, &dependency_info_before_compute);
+        vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
+        vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline_layout, 0, 1, &compute_descriptor_set, 0, nullptr);
+
+        ComputePushConstants compute_push_constants = {
+            .dt = dt,
+            .time = elapsed,
+            .particle_count = PARTICLE_COUNT,
+            .floor_y = FLOOR_Y,
+            .wind = WIND,
+            .spawn_min = SPAWN_MIN,
+            .spawn_max = SPAWN_MAX,
+        };
+
+        vkCmdPushConstants(command_buffer, compute_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &compute_push_constants);
+        vkCmdDispatch(command_buffer, (PARTICLE_COUNT + 63) / 64, 1, 1);
+
+        VkBufferMemoryBarrier2 barrier_after_compute = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .pNext = NULL,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
+            .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = particle_buffer,
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+        };
+
+        VkDependencyInfo dependency_info_after_compute = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = NULL,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 1,
+            .pBufferMemoryBarriers = &barrier_after_compute,
+            .imageMemoryBarrierCount = 0,
+            .pImageMemoryBarriers = nullptr,
+        };
+
+        vkCmdPipelineBarrier2(command_buffer, &dependency_info_after_compute);
+        
         //--------------------------------------------------------------------------------------//
         // BEGIN RENDER PASS
         //--------------------------------------------------------------------------------------//
