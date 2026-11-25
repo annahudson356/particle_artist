@@ -1384,6 +1384,21 @@ int main()
         //       doesn't mean you should be reusing its pipeline layout.
 
 
+        vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, particle_pipeline);
+        vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+        vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+        vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, particle_pipeline_layout, 0, 1, &graphics_descriptor_set[current_frame], 0, nullptr);
+
+        float particle_point_scale = viewport.height * glm::abs(proj[1][1]) * 0.5f * PARTICLE_SIZE;
+        ParticlePushConstants particle_push_constants = {
+            .vp = VP,
+            .point_scale = particle_point_scale,
+            .time = elapsed,
+        };
+
+        vkCmdPushConstants(command_buffer, particle_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ParticlePushConstants), &particle_push_constants);
+        vkCmdBindVertexBuffers(command_buffer, 0, 1, &particle_buffer, &vert_offset);
+        vkCmdDraw(command_buffer, PARTICLE_COUNT, 1, 0, 0);
 
         vkCmdEndRendering(command_buffer);
 
