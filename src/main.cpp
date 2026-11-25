@@ -1656,6 +1656,10 @@ int main()
     vkDestroyPipeline(device, graphics_pipeline, nullptr);
     vkDestroyPipelineLayout(device, graphics_pipeline_layout, nullptr);
     vkDestroyPipelineLayout(device, light_point_pipeline_layout, nullptr);
+    vkDestroyPipeline(device, particle_pipeline, nullptr);
+    vkDestroyPipeline(device, compute_pipeline, nullptr);
+    vkDestroyPipelineLayout(device, particle_pipeline_layout, nullptr);
+    vkDestroyPipelineLayout(device, compute_pipeline_layout, nullptr);
 
     vkDestroyCommandPool(device, command_pool, nullptr);
 
