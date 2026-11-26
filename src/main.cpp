@@ -235,7 +235,8 @@ static const char* PARTICLE_FRAGMENT_SHADER_PATH =          SHADER_DIR "/particl
 static const float FLOOR_Y = 0.f;
 static const glm::vec4 SPAWN_MIN = glm::vec4(-8.f, 6.f, -8.f, 0.f);
 static const glm::vec4 SPAWN_MAX = glm::vec4( 8.f, 6.5f, 8.f, 0.f);
-static const glm::vec4 WIND = glm::vec4(0.f, 0.f, 0.f, 2.f);
+// Needed to meet minor feature "basic forces"
+static const glm::vec4 WIND = glm::vec4(0.6f, 0.f, 0.2f, 2.f);
 
 
 //validation layers pass debug messages to this function
@@ -470,8 +471,25 @@ int main()
     //--------------------------------------------------------------------------------------//
 
     std::vector<Object> objects = {
-        {.mesh = mesh_lookup.at("Floor.obj"),           .position = {0.f, 0.f, 0.f},   .rotation = {0.f, 0.f, 0.f},     .scale = {0.5f, 0.5f, 0.5f},  .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Face.obj"),            .position = {0.f, 1.f, 0.f},   .rotation = {0.f, -90.f, 0.f},     .scale = {1.f, 1.f, 1.f},     .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Floor.obj"),        .position = {0.f, 0.f, 0.f},     .rotation = {0.f, 0.f, 0.f},    .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {0.3f, 0.f, -3.8f},  .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {3.8f, 0.f, -2.3f},  .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {-4.2f, 0.f, 2.3f},  .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {1.8f, 0.f, 1.7f},   .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {-2.3f, 0.f, 3.8f},  .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {3.7f, 0.f, 4.2f},   .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("logcottage.obj"),   .position = {-3.f, 0.f, 0.f},    .rotation = {0.f, 90.f, 0.f},   .scale = {0.15f, 0.15f, 0.15f}, .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-3.8f, 0.f, -4.2f}, .rotation = {0.f, 0.f, 0.f},    .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-1.7f, 0.f, -3.7f}, .rotation = {0.f, 70.f, 0.f},   .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.3f, 0.f, -4.2f},  .rotation = {0.f, 140.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {4.2f, 0.f, -3.7f},  .rotation = {0.f, 215.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-4.3f, 0.f, -1.8f}, .rotation = {0.f, 30.f, 0.f},   .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {1.7f, 0.f, -2.2f},  .rotation = {0.f, 105.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.3f, 0.f, 0.3f},   .rotation = {0.f, 180.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-0.3f, 0.f, 2.2f},  .rotation = {0.f, 250.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {4.2f, 0.f, 1.8f},   .rotation = {0.f, 55.f, 0.f},   .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-3.7f, 0.f, 4.3f},  .rotation = {0.f, 125.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.2f, 0.f, 3.7f},   .rotation = {0.f, 300.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
     };
 
     if (objects.size() > MAX_OBJECTS) {
