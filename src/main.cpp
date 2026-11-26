@@ -2782,7 +2782,7 @@ int ParticlePipelineCreation(const VkDevice& device, const VkDescriptorSetLayout
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
     };
 
-    VkVertexInputAttributeDescription vertex_input_attributes[3] = {
+    VkVertexInputAttributeDescription vertex_input_attributes[1] = {
         {
             .location = 0,
             .binding = 0,
@@ -2797,7 +2797,7 @@ int ParticlePipelineCreation(const VkDevice& device, const VkDescriptorSetLayout
         .flags = 0,
         .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = &vertex_input_binding,
-        .vertexAttributeDescriptionCount = 3,
+        .vertexAttributeDescriptionCount = 1,
         .pVertexAttributeDescriptions = vertex_input_attributes,
     };
 
