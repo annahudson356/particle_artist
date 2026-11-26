@@ -8,9 +8,8 @@
 // want your shader to run, since we are using points. Divide point_scale by w to achieve
 // perspective-correct sizing (see how lightpoint.vert does it).
 
-layout(location = 0) in vec3  in_position;
-layout(location = 1) in float in_current_life;
-layout(location = 2) in float in_lifespan;
+
+layout(location = 0) out flat vec3 out_pos; 
 
 layout(push_constant) uniform Push {
     mat4 vp;
@@ -18,9 +17,11 @@ layout(push_constant) uniform Push {
     float time;
 } pc;
 
+layout(location = 0) in vec3 in_position;
 
 void main()
 {
     gl_Position = pc.vp * vec4(in_position, 1.0);
     gl_PointSize = pc.point_scale / gl_Position.w;
+    out_pos = in_position;
 }
