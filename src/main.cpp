@@ -78,12 +78,7 @@ struct Particle {
     float phase;
     float age;
     float lifespan;
-    float rotation;
-    float spin;
-    float seed;
-    uint32_t state;
-    float rest_time;
-    float flip_offset;
+    uint32_t pad[2]; 
 };
 
 struct ComputePushConstants {
@@ -144,7 +139,7 @@ static_assert(sizeof(PointLight) == 32, "PointLight must match std430 layout");
 static_assert(sizeof(LightHeader) == 128, "LightHeader must match std430 layout");
 //(P2) add Particle static_assert here
 // Part A asserts
-static_assert(sizeof(Particle) == 64, "Particle must match std430 layout");
+static_assert(sizeof(Particle) == 48, "Particle must match std430 layout");
 static_assert(sizeof(Particle) % 16 == 0, "Particle size must be a multiple of 16 (vec3 alignment)");
 static_assert(sizeof(ComputePushConstants) == 64, "ComputePushConstants must match layout");
 static_assert(sizeof(ParticlePushConstants) == 80, "ParticlePushConstants must match layout");
@@ -588,6 +583,7 @@ int main()
             .position = {-8.f + (16.f * dis(gen)), 6.f * dis(gen), -8.f + (16.f * dis(gen))},
             .current_life = lifespan * dis(gen),
             .velocity = {0.f, -0.5f, 0.f},
+            .phase = 6.2831853f * dis(gen),
             .lifespan = lifespan,
         });
     }
