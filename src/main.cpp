@@ -95,12 +95,14 @@ struct ComputePushConstants {
     glm::vec4 spawn_min;
     glm::vec4 spawn_max;
 };
-
+// Edits for Per Particle Phase Variation
+// Based on tutorial linked in my references
 struct ParticlePushConstants {
     glm::mat4 vp;
     float point_scale;
     float time;
-    uint32_t pad[2];
+    float radiusX;
+    float radiusZ;
 };
 
 struct Material {
@@ -1536,6 +1538,8 @@ int main()
             .vp = VP,
             .point_scale = particle_point_scale,
             .time = elapsed,
+            .radiusX = 2.0f,
+            .radiusZ = 2.0f,
         };
 
         vkCmdPushConstants(command_buffer, particle_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ParticlePushConstants), &particle_push_constants);

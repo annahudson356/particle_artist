@@ -15,13 +15,22 @@ layout(push_constant) uniform Push {
     mat4 vp;
     float point_scale;
     float time;
+    float radiusX;
+    float radiusZ;
 } pc;
 
 layout(location = 0) in vec3 in_position;
 
 void main()
 {
-    gl_Position = pc.vp * vec4(in_position, 1.0);
+    // Edited for per-particle phase variation, based on the tutorial provided
+    vec3 pos = in_position;
+
+    pos.x += cos((pc.time * 0.5 + in_position.z) * 0.25) * pc.radiusX;
+    pos.z += sin((pc.time * 0.5 + in_position.x) * 0.25) * pc.radiusZ;
+
+
+    gl_Position = pc.vp * vec4(pos, 1.0);
     gl_PointSize = pc.point_scale / gl_Position.w;
-    out_pos = in_position;
+    out_pos = pos;
 }
