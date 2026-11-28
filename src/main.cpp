@@ -119,7 +119,10 @@ struct LightHeader {
     glm::vec4 camera_pos;
     uint32_t light_count;
     float ambient;
-    uint32_t pad[2];
+    // uint32_t pad[2];
+    // I added these constants for Major feature "Point Light Shadows"
+    uint32_t which_shadow; 
+    float shadow_far_plane; 
     glm::mat4 sun_VP;
     glm::vec4 sun_direction;
     glm::vec4 sun_color;
@@ -222,11 +225,12 @@ static const VkPhysicalDeviceType PREFERRED_DEVICE_TYPE =   VK_PHYSICAL_DEVICE_T
 static const bool PREFER_SECOND_MONITOR =                   false;
 static const uint32_t MAX_LIGHTS =                          25;
 static const glm::vec3 SUN_DIRECTION =                      glm::vec3(-0.4f, -1.f, -0.3f);
-static const glm::vec4 SUN_COLOR =                          glm::vec4(1.f, 1.f, 1.f, 0.6f);
+// Turned off the sun so that you can see the point light shadows of the lanterns!
+static const glm::vec4 SUN_COLOR =                          glm::vec4(1.f, 1.f, 1.f, 0.0f);
 static const uint32_t SHADOW_MAP_SIZE =                     4096;
 static const float SHADOW_EXTENT =                          10.f;
 static const float SHADOW_DISTANCE =                        10.f;
-static const uint32_t PARTICLE_COUNT = 20000; // I modified this
+static const uint32_t PARTICLE_COUNT = 8000; // I modified this to make the snow look good
 static const float PARTICLE_SIZE =                          0.025f; //particle width in world space
 static const char* COMPUTE_SHADER_PATH =                    SHADER_DIR "/particle.comp.spv";
 static const char* PARTICLE_VERTEX_SHADER_PATH =            SHADER_DIR "/particle.vert.spv";
@@ -236,8 +240,12 @@ static const float FLOOR_Y = 0.f;
 static const glm::vec4 SPAWN_MIN = glm::vec4(-8.f, 6.f, -8.f, 0.f);
 static const glm::vec4 SPAWN_MAX = glm::vec4( 8.f, 6.5f, 8.f, 0.f);
 // Needed to meet minor feature "basic forces"
-static const glm::vec4 WIND = glm::vec4(0.6f, 0.f, 0.2f, 2.f);
-
+static const glm::vec4 WIND = glm::vec4(1.4f, 0.f, 0.2f, 2.f);
+// Needed to meet major feature "point light shadows"
+static const uint32_t POINT_SHADOW_SIZE = 1024;
+static const float POINT_SHADOW_NEAR = 0.05f;
+static const float POINT_SHADOW_FAR = 20.f;
+static const uint32_t POINT_SHADOW_LIGHT = 3;
 
 //validation layers pass debug messages to this function
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity, VkDebugUtilsMessageTypeFlagsEXT message_types, const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data);
@@ -290,6 +298,11 @@ int MeshImport(std::vector<Mesh>& meshes, std::unordered_map<std::string, uint32
 int MeshUpload(const VkDevice& device, const VkPhysicalDeviceMemoryProperties& memory_properties, const VkQueue& queue, const VkCommandPool& command_pool, const std::vector<Vertex>& all_vertices, const std::vector<uint32_t>& all_indices, VkBuffer& model_vertex_buffer, VkDeviceMemory& model_vertex_buffer_memory, VkBuffer& model_index_buffer, VkDeviceMemory& model_index_buffer_memory);
 int MaterialUpload(const VkDevice& device, const VkPhysicalDeviceMemoryProperties& memory_properties, const VkQueue& queue, const VkCommandPool& command_pool, const std::vector<Material>& materials, const VkDescriptorSet& material_descriptor_set, VkBuffer& material_buffer, VkDeviceMemory& material_buffer_memory);
 int TextureUpload(const VkDevice& device, const VkPhysicalDeviceMemoryProperties& memory_properties, const VkQueue& queue, const VkCommandPool& command_pool, const std::string& diffuse_texture_filename, const VkDescriptorSet& material_descriptor_set, VkImage& diffuse_texture, VkDeviceMemory& diffuse_texture_memory, VkImageView& diffuse_texture_view, VkSampler& diffuse_sampler);
+
+// Functions I added to implement features
+// Function for Point Light Shadows
+int CreatePointShadow(const VkDevice& device, const VkPhysicalDeviceMemoryProperties& properties, const std::vector<VkDescriptorSet>& set, const VkSampler& sampler, std::vector<VkImage>& cube, VkDeviceMemory& cube_memory, std::vector<VkImageView>& cube_view, std::vector<VkImageView>& cube_face);
+
 
 int main()
 {
@@ -403,6 +416,15 @@ int main()
     int smc = ShadowMapCreation(device, physical_device, memory_properties, graphics_descriptor_set, shadow_map, shadow_map_memory, shadow_map_view, shadow_sampler);
     if (smc != 0) return smc;
 
+    // Point Light Shadows - Create Point Shadow
+
+    std::vector<VkImage> cube_image(FRAMES_IN_FLIGHT);
+    VkDeviceMemory cube_memory = VK_NULL_HANDLE;
+    std::vector<VkImageView> cube_view(FRAMES_IN_FLIGHT);
+    std::vector<VkImageView> cube_face_view(FRAMES_IN_FLIGHT * 6);
+    int psc = CreatePointShadow(device, memory_properties, graphics_descriptor_set, shadow_sampler, cube_image, cube_memory, cube_view, cube_face_view);
+    if (psc != 0) return psc;
+
     //--------------------------------------------------------------------------------------//
     // GRAPHICS PIPELINE CREATION
     //--------------------------------------------------------------------------------------//
@@ -472,24 +494,24 @@ int main()
 
     std::vector<Object> objects = {
         {.mesh = mesh_lookup.at("Floor.obj"),        .position = {0.f, 0.f, 0.f},     .rotation = {0.f, 0.f, 0.f},    .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {0.3f, 0.f, -3.8f},  .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {3.8f, 0.f, -2.3f},  .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {-4.2f, 0.f, 2.3f},  .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {1.8f, 0.f, 1.7f},   .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {-2.3f, 0.f, 3.8f},  .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {3.7f, 0.f, 4.2f},   .rotation = {0.f, -90.f, 0.f},  .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("logcottage.obj"),   .position = {-3.f, 0.f, 0.f},    .rotation = {0.f, 90.f, 0.f},   .scale = {0.15f, 0.15f, 0.15f}, .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-3.8f, 0.f, -4.2f}, .rotation = {0.f, 0.f, 0.f},    .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-1.7f, 0.f, -3.7f}, .rotation = {0.f, 70.f, 0.f},   .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.3f, 0.f, -4.2f},  .rotation = {0.f, 140.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {4.2f, 0.f, -3.7f},  .rotation = {0.f, 215.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-4.3f, 0.f, -1.8f}, .rotation = {0.f, 30.f, 0.f},   .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {1.7f, 0.f, -2.2f},  .rotation = {0.f, 105.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.3f, 0.f, 0.3f},   .rotation = {0.f, 180.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-0.3f, 0.f, 2.2f},  .rotation = {0.f, 250.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {4.2f, 0.f, 1.8f},   .rotation = {0.f, 55.f, 0.f},   .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-3.7f, 0.f, 4.3f},  .rotation = {0.f, 125.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
-        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.2f, 0.f, 3.7f},   .rotation = {0.f, 300.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {0.3f, 0.f, -3.8f}, .rotation = {0.f, -90.f, 0.f}, .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {3.8f, 0.f, -2.3f}, .rotation = {0.f, -90.f, 0.f}, .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {-4.2f, 0.f, 2.3f}, .rotation = {0.f, -90.f, 0.f}, .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {1.8f, 0.f, 1.7f},  .rotation = {0.f, -90.f, 0.f}, .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {-2.3f, 0.f, 3.8f}, .rotation = {0.f, -90.f, 0.f}, .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Lamp.obj"),         .position = {3.7f, 0.f, 4.2f},  .rotation = {0.f, -90.f, 0.f}, .scale = {0.5f, 0.5f, 0.5f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("logcottage.obj"), .position = {-3.f, 0.f, 0.f}, .rotation = {0.f, 90.f, 0.f}, .scale = {0.15f, 0.15f, 0.15f}, .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-3.8f, 0.f, -4.2f}, .rotation = {0.f, 0.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-1.7f, 0.f, -3.7f}, .rotation = {0.f, 70.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.3f, 0.f, -4.2f}, .rotation = {0.f, 140.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {4.2f, 0.f, -3.7f}, .rotation = {0.f, 215.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-4.3f, 0.f, -1.8f}, .rotation = {0.f, 30.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {1.7f, 0.f, -2.2f}, .rotation = {0.f, 105.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.3f, 0.f, 0.3f}, .rotation = {0.f, 180.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-0.3f, 0.f, 2.2f}, .rotation = {0.f, 250.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {4.2f, 0.f, 1.8f}, .rotation = {0.f, 55.f, 0.f},  .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {-3.7f, 0.f, 4.3f}, .rotation = {0.f, 125.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
+        {.mesh = mesh_lookup.at("Fir-tree_obj.obj"), .position = {2.2f, 0.f, 3.7f}, .rotation = {0.f, 300.f, 0.f}, .scale = {0.3f, 0.3f, 0.3f},    .animation = ANIMATION_NONE},
     };
 
     if (objects.size() > MAX_OBJECTS) {
@@ -498,8 +520,20 @@ int main()
     }
 
     float ambient_strength = 0.05f;
+    // Edited for major feature "point light shadows." The commented out one is the original test light from the scaffold.
+    // The goal for this feature was to use the lanterns to light the scene, so each light is placed where the lantern would
+    // be in the scene. I had to play with the sizing a bunch to get it right.
     std::vector<PointLight> lights = {
-        {.position = { 0.635115f, 2.f, 1.6f, 1.f},  .color = {1.f,   1.f,  1.f, 1.25f}},
+        // Original light I made into the moon by making it bigger and moving it up and to the corner
+        // {.position = {5.f, 3.f, -5.f, 1.f},  .color = {1.f, 1.f, 1.f, 3.f}},
+
+        // Lanterns
+        {.position = {0.3f, 1.25f, -3.8f, 1.f}, .color = {1.f, 0.7f, 0.35f, 2.5f}},
+        {.position = {3.8f, 1.25f, -2.3f, 1.f}, .color = {1.f, 0.78f, 0.5f, 2.0f}},
+        {.position = {-4.2f, 1.25f, 2.3f, 1.f}, .color = {1.f, 0.78f, 0.5f, 2.0f}},
+        {.position = {1.8f, 1.25f, 1.7f, 1.f}, .color = {1.f, 0.78f, 0.5f, 2.0f}},
+        {.position = {-2.3f, 1.25f, 3.8f, 1.f}, .color = {1.f, 0.78f, 0.5f, 2.0f}},
+        {.position = {3.7f, 1.25f, 4.2f, 1.f}, .color = {1.f, 0.7f, 0.35f, 2.5f}},
     };
 
     float camera_light_intensity = 0.f;
@@ -547,9 +581,9 @@ int main()
     VkDeviceMemory particle_memory = VK_NULL_HANDLE;
     for (uint32_t i = 0; i < PARTICLE_COUNT; ++i) {
         // Particles currently live between 5-15 seconds
-        float lifespan = 5.f + 10.f * dis(gen);
+        float lifespan = 5.f + (10.f * dis(gen));
         particles.push_back({
-            .position = {-8.f + 16.f * dis(gen), 6.f * dis(gen), -8.f + 16.f * dis(gen)},
+            .position = {-8.f + (16.f * dis(gen)), 6.f * dis(gen), -8.f + (16.f * dis(gen))},
             .current_life = lifespan * dis(gen),
             .velocity = {0.f, -0.5f, 0.f},
             .lifespan = lifespan,
@@ -1126,6 +1160,9 @@ int main()
             .camera_pos = glm::vec4(cam_pos, 1.f),
             .light_count = (uint32_t)lights.size() + 1, //camera light is not part of lights array
             .ambient = ambient_strength,
+            // edited for "point-light shadows"
+            .which_shadow = POINT_SHADOW_LIGHT,
+            .shadow_far_plane = POINT_SHADOW_FAR,
             .sun_VP = sun_VP,
             .sun_direction = glm::vec4(sun_direction, 0.f),
             .sun_color = SUN_COLOR,
@@ -1233,6 +1270,93 @@ int main()
             .image = shadow_map[current_frame],
             .subresourceRange = shadow_subresource_range,
         };
+
+        // Added for Point Light Shadow
+        const glm::vec3 face_dir[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
+        const glm::vec3 face_up[6] = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};
+        glm::vec3 shadow_pos = glm::vec3(lights[POINT_SHADOW_LIGHT].position);
+        glm::mat4 cube_proj = glm::perspectiveRH_ZO(glm::radians(90.f), 1.f, POINT_SHADOW_NEAR, POINT_SHADOW_FAR);   //note: NO y flip
+
+        VkImageSubresourceRange cube_range = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 6};
+
+        VkImageMemoryBarrier2 barrier_to_cube_attachment = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+            .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = cube_image[current_frame],
+            .subresourceRange = cube_range,
+        };
+        VkDependencyInfo cube_dep_in = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &barrier_to_cube_attachment,
+        };
+        vkCmdPipelineBarrier2(command_buffer, &cube_dep_in);
+
+        VkViewport cube_viewport = {0.f, 0.f, float(POINT_SHADOW_SIZE), float(POINT_SHADOW_SIZE), 0.f, 1.f};
+        VkRect2D cube_scissor = {{0, 0}, {POINT_SHADOW_SIZE, POINT_SHADOW_SIZE}};
+
+        for (uint32_t f = 0; f < 6; ++f) {
+            VkRenderingAttachmentInfo face_attachment = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .imageView = cube_face_view[current_frame * 6 + f],
+                .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .clearValue = {.depthStencil = {.depth = 1.0f}},
+            };
+            VkRenderingInfo face_rendering = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                .renderArea = {{0, 0}, {POINT_SHADOW_SIZE, POINT_SHADOW_SIZE}},
+                .layerCount = 1,
+                .colorAttachmentCount = 0,
+                .pDepthAttachment = &face_attachment,
+            };
+
+            vkCmdBeginRendering(command_buffer, &face_rendering);
+            vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_pipeline);
+            vkCmdSetViewport(command_buffer, 0, 1, &cube_viewport);
+            vkCmdSetScissor(command_buffer, 0, 1, &cube_scissor);
+            vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline_layout, 0, 1, &graphics_descriptor_set[current_frame], 0, nullptr);
+
+            GraphicsPushConstants face_push = {.VP = cube_proj * glm::lookAtRH(shadow_pos, shadow_pos + face_dir[f], face_up[f])};
+            vkCmdPushConstants(command_buffer, graphics_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GraphicsPushConstants), &face_push);
+            vkCmdBindVertexBuffers(command_buffer, 0, 1, &model_vertex_buffer, &vert_offset);
+            vkCmdBindIndexBuffer(command_buffer, model_index_buffer, 0, VK_INDEX_TYPE_UINT32);
+
+            for (uint32_t i = 0; i < objects.size(); ++i) {
+                if (i == 1 + POINT_SHADOW_LIGHT) continue;   //the light sits inside its own lamp mesh, which would block everything
+                const Mesh& mesh = meshes[objects[i].mesh];
+                vkCmdDrawIndexed(command_buffer, mesh.index_count, 1, mesh.first_index, mesh.vertex_offset, i);
+            }
+            vkCmdEndRendering(command_buffer);
+        }
+
+        VkImageMemoryBarrier2 barrier_to_cube_read = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+            .srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = cube_image[current_frame],
+            .subresourceRange = cube_range,
+        };
+        VkDependencyInfo cube_dep_out = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &barrier_to_cube_read,
+        };
+        vkCmdPipelineBarrier2(command_buffer, &cube_dep_out);
 
         VkDependencyInfo dependency_info_to_shadow_read = {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
@@ -1668,6 +1792,15 @@ int main()
         vkDestroySemaphore(device, image_available_semaphores[i], nullptr);
         vkDestroyFence(device, in_flight_fences[i], nullptr);
     }
+    // Cleanup for Point Light Shadow
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
+        vkDestroyImageView(device, cube_view[i], nullptr);
+        vkDestroyImage(device, cube_image[i], nullptr);
+    }
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT * 6; ++i) {
+        vkDestroyImageView(device, cube_face_view[i], nullptr);
+    }
+    vkFreeMemory(device, cube_memory, nullptr);
 
     vkDestroyPipeline(device, shadow_pipeline, nullptr);
     vkDestroyPipeline(device, light_point_pipeline, nullptr);
@@ -2429,8 +2562,11 @@ int GraphicsDescriptorSetCreation(const VkDevice& device, const VkPhysicalDevice
             .descriptorCount = FRAMES_IN_FLIGHT * 2 + 1, //set 0 needs FIF * 2, set 1 needs 1
         },
         {
+            // .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            // .descriptorCount = FRAMES_IN_FLIGHT + 1,
+            // Updated for point light shadows
             .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = FRAMES_IN_FLIGHT + 1,
+            .descriptorCount = FRAMES_IN_FLIGHT * 2 + 1
         },
     };
 
@@ -2446,7 +2582,7 @@ int GraphicsDescriptorSetCreation(const VkDevice& device, const VkPhysicalDevice
     VK_CHECK(vkCreateDescriptorPool(device, &descriptor_pool_info, nullptr, &graphics_descriptor_pool));
 
     //set 0: per-frame data (model matrices & lights)
-    VkDescriptorSetLayoutBinding descriptor_set_layout_bindings[3] = {
+    VkDescriptorSetLayoutBinding descriptor_set_layout_bindings[4] = {
         {
             .binding = 0,
             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -2465,13 +2601,20 @@ int GraphicsDescriptorSetCreation(const VkDevice& device, const VkPhysicalDevice
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
         },
+        // Added for point light shadows
+        {
+            .binding = 3,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
     };
 
     VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .pNext = NULL,
         .flags = 0,
-        .bindingCount = 3,
+        .bindingCount = 4,
         .pBindings = descriptor_set_layout_bindings,
     };
 
@@ -4602,4 +4745,84 @@ static void scroll_callback(GLFWwindow* window, double x_offset, double y_offset
     (void)x_offset;
 
     scroll_accumulator += y_offset;
+}
+
+// Functions that I added for the major and minor features are below!
+// Function based on ShadowMapCreation with six layers and cube compatability
+int CreatePointShadow(const VkDevice& device, const VkPhysicalDeviceMemoryProperties& memory_properties, const std::vector<VkDescriptorSet>& graphics_descriptor_set, const VkSampler& shadow_sampler, std::vector<VkImage>& cube_image, VkDeviceMemory& cube_memory, std::vector<VkImageView>& cube_view, std::vector<VkImageView>& cube_face_view)
+{
+    VkImageCreateInfo image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = DEPTH_FORMAT,
+        .extent = {POINT_SHADOW_SIZE, POINT_SHADOW_SIZE, 1},
+        .mipLevels = 1,
+        .arrayLayers = 6,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
+        VK_CHECK(vkCreateImage(device, &image_info, nullptr, &cube_image[i]));
+    }
+
+    VkMemoryRequirements reqs = {};
+    vkGetImageMemoryRequirements(device, cube_image[0], &reqs);
+    uint32_t type_index = FindMemoryType(memory_properties, reqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (type_index == UINT32_MAX) {
+        std::fprintf(stderr, "No device-local memory type available\n");
+        return EXIT_FAILURE;
+    }
+    VkDeviceSize stride = ((reqs.size + reqs.alignment - 1) / reqs.alignment) * reqs.alignment;
+
+    VkMemoryAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = stride * FRAMES_IN_FLIGHT,
+        .memoryTypeIndex = type_index,
+    };
+    VK_CHECK(vkAllocateMemory(device, &alloc_info, nullptr, &cube_memory));
+
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
+        VK_CHECK(vkBindImageMemory(device, cube_image[i], cube_memory, i * stride));
+
+        VkImageViewCreateInfo cube_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = cube_image[i],
+            .viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+            .format = DEPTH_FORMAT,
+            .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 6},
+        };
+        VK_CHECK(vkCreateImageView(device, &cube_info, nullptr, &cube_view[i]));
+
+        for (uint32_t f = 0; f < 6; ++f) {
+            VkImageViewCreateInfo face_info = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .image = cube_image[i],
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = DEPTH_FORMAT,
+                .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, f, 1},
+            };
+            VK_CHECK(vkCreateImageView(device, &face_info, nullptr, &cube_face_view[i * 6 + f]));
+        }
+
+        VkDescriptorImageInfo image_desc = {
+            .sampler = shadow_sampler,
+            .imageView = cube_view[i],
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkWriteDescriptorSet write = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = graphics_descriptor_set[i],
+            .dstBinding = 3,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &image_desc,
+        };
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+    }
+    return 0;
 }

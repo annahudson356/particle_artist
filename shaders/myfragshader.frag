@@ -28,6 +28,10 @@ layout(std430, set = 0, binding = 1) readonly buffer Lights {
     vec4 camera_pos;
     uint light_count;
     float A;
+    // Added for Point light shadow
+    uint which_shadow;          
+    float shadow_far_plane; 
+
     mat4 sun_VP;
     vec4 sun_direction;
     vec4 sun_color;
@@ -36,12 +40,26 @@ layout(std430, set = 0, binding = 1) readonly buffer Lights {
 
 layout(set = 0, binding = 2) uniform sampler2DShadow shadow_map;
 
+// Added for point light shadow
+layout(set = 0, binding = 3) uniform samplerCubeShadow point_shadow; 
+
 layout(std430, set = 1, binding = 0) readonly buffer Materials {
     Material material[];
 }materials;
 
 layout(set = 1, binding = 1) uniform sampler2D diffuse_texture;
+const float POINT_SHADOW_NEAR = 0.05; 
 
+
+float point_visibility(vec3 p, vec3 light_pos)
+{
+    vec3 v = p - light_pos; 
+    float d = max(max(abs(v.x), abs(v.y)), abs(v.z));
+    if (d >= lights.shadow_far_plane) return 1.0;
+    d = max(d - 0.01, POINT_SHADOW_NEAR);
+    float ref = lights.shadow_far_plane * (d - POINT_SHADOW_NEAR) / (d * (lights.shadow_far_plane - POINT_SHADOW_NEAR));
+    return texture(point_shadow, vec4(v, ref));
+}
 void main()
 {
     Material mat = materials.material[in_material];
@@ -75,6 +93,12 @@ void main()
         if (ndotl <= 0.0) specular = vec3(0.0);
 
         vec3 radiance = light.color.rgb * light.intensity / (1 + pow(d, 2));
+
+        // Updated for point light shadow, commented code was in original shader
+        // color += radiance * (diffuse + specular);
+        if (i == lights.which_shadow) {
+            radiance *= point_visibility(in_pos + n * 0.03, light.position.xyz);
+        }
 
         color += radiance * (diffuse + specular);
     }
